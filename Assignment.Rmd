@@ -1,0 +1,126 @@
+---
+title: "Practical Machine Learning Week 4 Assignment"
+author: "Lee Saxton"
+date: "10/03/2021"
+output: html_document
+---
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+# Introduction
+
+The goal of this assignment is to us the accelerometer data from the belt, forearm, arm and dumbbell of 6 participants to identify the class of exercise being performed. This is described as:
+  
+Class A = perform barbell lift correctly  
+Class B = throwing elbows to the front  
+Class C = lifting dumbell only half way  
+Class D = lowering the dumbbell only half way  
+Class E = throwing the hips to the front  
+  
+# Data Loading and Cleaning 
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+Download the datasets:  
+  
+```{r, results="hide", message=FALSE}
+setwd("/users/lee_saxton/Documents/Data Science Specialisation/08 Practical Machine Learning/Week 4 Assignment/Week 4 Assignment - R Studio/")
+if (!file.exists("data")) {
+  dir.create("data")
+}
+TrainUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(TrainUrl, destfile="./data/pml-training.csv", method="curl")
+download.file(TestUrl, destfile="./data/pml-testing.csv", method="curl")
+training <- read.csv("./data/pml-training.csv", na.strings=c("NA", ""))
+testing <- read.csv("./data/pml-testing.csv", na.strings=c("NA",""))
+```
+  
+Now remove the NA and blank entries from the data, essentially remove columns where the number of NA values in the column is not less than 95% of the number of rows in the dataset
+  
+```{r, results="hide"}
+training_noNA <- training[,colSums(is.na(training))<0.95*nrow(training)]
+testing_noNA <- testing[,colSums(is.na(testing))<nrow(testing)]
+```
+  
+Now remove the unnecessary columns (1-7) that don't include measurement data    
+  
+```{r, results="hide"}
+training_noNA <- training_noNA[,-(1:7)]
+testing_noNA <- testing_noNA[,-(1:7)]
+```
+ 
+# Validation
+
+We will use the training_noNA dataset to build and validate models. The final testing will be made using the testing_noNA data. So we need to split the training_noNA data into 2 groups, one for modeling and one for testing.  
+  
+```{r, message=FALSE}
+library(caret)
+set.seed(12345)
+InTest <- createDataPartition(y=training_noNA$classe, p=0.7, list=FALSE)
+subtraining <- training_noNA[InTest,]
+subtesting <- training_noNA[-InTest,]
+dim(subtesting)
+dim(subtraining)
+```
+  
+# Modeling  
+  
+I will create models using rf and gbm methods (random forest and generalised boosting). The resulting models will be tested using the subtesting data and I will then select the most accurate model for the final test on the testing_noNA data.
+  
+## Random Forest Model  
+  
+Run random forest model. Use of training control required to limit runtime (tip found online).
+  
+```{r}
+set.seed(12345)
+library(caret)
+controlrf <- trainControl(method="cv", number=3)
+rffit <- train(classe ~ ., data=subtraining, method="rf", trControl=controlrf)
+rffit$finalModel
+```
+Now run prediction test to obtain confusion matrix and an estimate of the model accuracy.  
+  
+```{r}
+rfpredict <- predict(rffit, newdata=subtesting)
+rfcm <- confusionMatrix(rfpredict, factor(subtesting$classe))
+rfcm
+```
+  
+## Generalised Boosting Model  
+  
+Run the gbm model. Again, use of trainControl applied to limit runtime.
+```{r, message=FALSE}
+set.seed(12345)
+library(caret)
+controlgb <- trainControl(method="repeatedcv", number=5, repeats=1)
+gbfit <- train(classe ~ ., data=subtraining, method="gbm", trControl=controlgb, verbose=FALSE)
+gbfit$finalModel
+```
+Now run prediction test to obtain confusion matrix and an estimate of the model accuracy.  
+  
+```{r}
+gbpredict <- predict(gbfit, newdata=subtesting)
+gbcm <- confusionMatrix(gbpredict, factor(subtesting$classe))
+gbcm
+```
+  
+# Results
+
+The random forest model gave an accuracy of 99.51%. The generalized boosting model gave an accuracy of 96.28%. I will therefore use the random forest model on the validation data.
+  
+# Validation
+  
+I will now apply the random forest predictor to the validation data. The resulting predictions will be entered in to the course prediction quiz.  
+  
+```{r}
+finalprediction <- predict(rffit, testing_noNA)
+finalprediction
+```
+
